@@ -37,7 +37,7 @@ export default function Home() {
       const taskArn = data.taskArn;
 
       // Connect to WebSocket server on EC2
-      wsRef.current = new WebSocket('ws://your-ec2-public-ip:8080'); // Replace with EC2 IP
+      wsRef.current = new WebSocket('ws://3.110.166.174:8080'); // Replace with EC2 IP
       wsRef.current.onopen = () => {
         wsRef.current?.send(JSON.stringify({ taskArn }));
         xtermRef.current?.writeln('Lab ready! Type commands (e.g., whoami, echo "Hello"):');

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const response = await fetch('https://your-api-gateway-url/start-lab', {
+    const response = await fetch('https://dlvdgyhnsh.execute-api.ap-south-1.amazonaws.com/Test/start-lab', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
