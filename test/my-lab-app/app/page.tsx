@@ -34,7 +34,7 @@ export default function Home() {
       const response = await fetch('/api/start-lab', { method: 'POST' });
       if (!response.ok) throw new Error('Failed to start lab');
       const data = await response.json();
-      const taskArn = data.taskArn;
+      const taskArn = arn:aws:ecs:ap-south-1:533267257785:task/multi-cluster/097dce63a8f74862869b6c25d1fbc1cf //data.taskArn;
 
       // Connect to WebSocket server on EC2
       wsRef.current = new WebSocket('ws://3.110.166.174:8080'); // Replace with EC2 IP
