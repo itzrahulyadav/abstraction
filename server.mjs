@@ -7,11 +7,18 @@ const wss = new WebSocketServer({ port: 8080 });
 wss.on('connection', (ws) => {
   console.log('Client connected');
   let sshConn = null;
-  let shellStream = null;
 
   ws.on('message', (message) => {
-    const data = JSON.parse(message.toString());
-    console.log('Received message:', data);
+    console.log('Raw message received:', message.toString()); // Log raw input
+    let data;
+    try {
+      data = JSON.parse(message.toString());
+      console.log('Parsed message:', data); // Confirm parsing
+    } catch (error) {
+      console.error('Failed to parse message:', error);
+      ws.send(JSON.stringify({ output: 'Error: Invalid message format\r\n$ ' }));
+      return;
+    }
 
     if (data.ip && !sshConn) {
       const sshConfig = {
@@ -25,47 +32,52 @@ wss.on('connection', (ws) => {
       sshConn = new Client();
       sshConn.on('ready', () => {
         console.log('SSH connection established');
-        // Start a persistent shell session
-        sshConn.shell((err, stream) => {
-          if (err) {
-            console.error('Shell error:', err);
-            ws.send(JSON.stringify({ output: 'Shell error: ' + err.message }));
-            return;
-          }
-          shellStream = stream;
-          ws.send(JSON.stringify({ output: 'Lab connected. Run commands!' }));
-
-          shellStream.on('data', (data) => {
-            console.log('Shell output:', data.toString());
-            ws.send(JSON.stringify({ output: data.toString() }));
-          }).on('error', (err) => {
-            console.error('Shell stream error:', err);
-            ws.send(JSON.stringify({ output: 'Shell stream error: ' + err.message }));
-          }).on('close', () => {
-            console.log('Shell stream closed');
-            ws.send(JSON.stringify({ output: 'Shell session closed' }));
-          });
-        });
+        ws.send(JSON.stringify({ output: 'Lab connected. Run commands!\r\n$ ' }));
       }).on('error', (err) => {
         console.error('SSH error:', err);
-        ws.send(JSON.stringify({ output: 'SSH connection failed: ' + err.message }));
+        ws.send(JSON.stringify({ output: 'SSH connection failed: ' + err.message + '\r\n$ ' }));
         sshConn = null;
       }).on('close', (hadError) => {
         console.log('SSH connection closed, hadError:', hadError);
-        ws.send(JSON.stringify({ output: 'SSH connection closed' }));
+        ws.send(JSON.stringify({ output: 'SSH connection closed\r\n$ ' }));
       }).connect(sshConfig);
-    } else if (data.command && shellStream) {
-      console.log('Sending command:', data.command);
-      shellStream.write(data.command + '\n'); // Send command with newline
+    } else if (data.command && sshConn) {
+      console.log('Executing command:', data.command);
+      sshConn.exec(data.command, { pty: true }, (err, stream) => {
+        if (err) {
+          console.error('Exec error:', err);
+          ws.send(JSON.stringify({ output: 'Exec error: ' + err.message + '\r\n$ ' }));
+          return;
+        }
+
+        let outputBuffer = '';
+        stream.on('data', (data) => {
+          outputBuffer += data.toString();
+          console.log('Command stdout:', data.toString());
+          ws.send(JSON.stringify({ output: data.toString() })); // Send output immediately
+        }).stderr.on('data', (data) => {
+          outputBuffer += data.toString();
+          console.log('Command stderr:', data.toString());
+          ws.send(JSON.stringify({ output: data.toString() }));
+        }).on('close', (code) => {
+          console.log('Command completed, exit code:', code);
+          if (code && code !== 0) {
+            ws.send(JSON.stringify({ output: `Command exited with code ${code}\r\n$ ` }));
+          } else if (!outputBuffer) {
+            ws.send(JSON.stringify({ output: '\r\n$ ' })); // Ensure prompt if no output
+          }
+        }).on('error', (err) => {
+          console.error('Stream error:', err);
+          ws.send(JSON.stringify({ output: 'Stream error: ' + err.message + '\r\n$ ' }));
+        });
+      });
+    } else {
+      console.log('No action taken for message:', data); // Debug unhandled messages
     }
   });
 
   ws.on('close', () => {
     console.log('Client disconnected');
-    if (shellStream) {
-      shellStream.end();
-      shellStream = null;
-    }
     if (sshConn) {
       sshConn.end();
       sshConn = null;
